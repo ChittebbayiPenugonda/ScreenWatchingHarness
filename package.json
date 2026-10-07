@@ -1,0 +1,23 @@
+{
+  "name": "screen-watching-harness",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP server that lets agents see your screen and point at things with an on-screen overlay",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "overlay": "electron overlay"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "electron": "^33.0.0",
+    "ws": "^8.18.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.0",
+    "typescript": "^5.6.0"
+  }
+}

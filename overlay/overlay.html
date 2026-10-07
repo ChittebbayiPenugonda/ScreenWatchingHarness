@@ -1,0 +1,180 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; width: 100vw; height: 100vh;
+    font-family: -apple-system, system-ui, sans-serif; }
+
+  /* #helper's origin is the tip of the helper's pointing hand: that is the spot it points at. */
+  #helper {
+    position: fixed; left: 0; top: 0; pointer-events: none;
+    transition: transform 700ms cubic-bezier(.22,1,.36,1);
+  }
+  #helper svg {
+    position: absolute; left: -44px; top: -44px; width: 48px; height: 48px; overflow: visible;
+    opacity: .5; transition: opacity 300ms;
+  }
+  #helper.active svg { opacity: .72; }
+  #body { animation: float 2.6s ease-in-out infinite; }
+  .eye { transform-box: fill-box; transform-origin: center; animation: blink 5s infinite; }
+  .arm { transition: d 600ms; }
+  @keyframes float { 50% { transform: translateY(-2px); } }
+  @keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.1); } }
+
+  #bubble {
+    position: absolute; right: -6px; bottom: 54px; width: max-content; max-width: 280px;
+    background: rgba(24, 24, 28, .82); color: #fff; font-size: 13px; line-height: 1.35; font-weight: 500;
+    padding: 7px 11px; border-radius: 12px; opacity: 0; transition: opacity 200ms;
+    backdrop-filter: blur(6px); pointer-events: none; white-space: pre-wrap;
+  }
+  #bubble.show { opacity: 1; }
+  #bubble.below { bottom: auto; top: 12px; }
+  #bubble.left { right: auto; left: -40px; }
+  #input {
+    display: none; width: 240px; background: transparent; border: 0; outline: 0; color: #fff;
+    font: 500 13px -apple-system, system-ui, sans-serif;
+  }
+  #bubble.typing { pointer-events: auto; opacity: 1; }
+  #bubble.typing #text { display: none; }
+  #bubble.typing #input { display: block; }
+  #hint { display: none; font-size: 10px; opacity: .6; margin-top: 3px; }
+  #bubble.typing #hint { display: block; }
+
+  .box {
+    position: fixed; border: 3px solid rgba(255, 105, 160, .85); border-radius: 8px; pointer-events: none;
+    box-shadow: 0 0 12px rgba(255, 105, 160, .5);
+  }
+  .box span {
+    position: absolute; left: -3px; top: -28px; font: 600 13px -apple-system, system-ui, sans-serif;
+    color: #fff; background: rgba(24, 24, 28, .82); padding: 3px 8px; border-radius: 8px; white-space: nowrap;
+  }
+  .box span:empty { display: none; }
+</style>
+</head>
+<body>
+<div id="helper">
+  <svg viewBox="0 0 48 48">
+    <g id="body">
+      <path d="M27 27 L41 41" stroke="#ff8fb8" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="43" cy="43" r="2.5" fill="#ff8fb8"/>
+      <circle cx="18" cy="18" r="13" fill="#ff8fb8"/>
+      <circle id="eyeL" class="eye" cx="13.5" cy="16" r="2" fill="#2a2030"/>
+      <circle id="eyeR" class="eye" cx="22.5" cy="16" r="2" fill="#2a2030"/>
+      <path d="M14.5 22 Q18 25 21.5 22" stroke="#2a2030" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+      <circle id="status" cx="29" cy="7" r="2.5" fill="#9a9aa5"/>
+    </g>
+  </svg>
+  <div id="bubble"><div id="text"></div><input id="input" spellcheck="false" /><div id="hint"></div></div>
+</div>
+<script>
+  const helper = document.getElementById("helper");
+  const bubble = document.getElementById("bubble");
+  const textEl = document.getElementById("text");
+  const input = document.getElementById("input");
+  const hint = document.getElementById("hint");
+  const status = document.getElementById("status");
+  const boxes = [];
+  let bubbleTimer;
+  let typing = false;
+  let shortcut = "";
+
+  const home = () => ({ x: innerWidth - 48, y: innerHeight - 56 });
+
+  function moveTo(x, y, pointing) {
+    helper.style.transform = `translate(${x}px, ${y}px)`;
+    helper.classList.toggle("active", pointing);
+    bubble.classList.toggle("below", y < 120);
+    bubble.classList.toggle("left", x < 240);
+    // while pointing, the eyes glance toward the target (down-right)
+    const o = pointing ? 1.2 : 0;
+    for (const [id, cx] of [["eyeL", 13.5], ["eyeR", 22.5]]) {
+      const el = document.getElementById(id);
+      el.setAttribute("cx", cx + o);
+      el.setAttribute("cy", 16 + o);
+    }
+  }
+
+  function say(text, ms) {
+    clearTimeout(bubbleTimer);
+    if (!text) { bubble.classList.remove("show"); return; }
+    textEl.textContent = text;
+    bubble.classList.add("show");
+    if (ms) bubbleTimer = setTimeout(() => { if (!typing) bubble.classList.remove("show"); }, ms);
+  }
+
+  function clearAll() {
+    boxes.splice(0).forEach((b) => b.remove());
+    say("");
+    const h = home();
+    moveTo(h.x, h.y, false);
+  }
+
+  function openInput() {
+    typing = true;
+    clearTimeout(bubbleTimer);
+    bubble.classList.add("typing");
+    hint.textContent = `Enter to send · Esc to cancel (${shortcut})`;
+    input.value = "";
+    input.style.display = "block";
+    input.placeholder = "Ask me something…";
+    input.focus();
+    helper.classList.add("active");
+  }
+
+  function closeInput() {
+    typing = false;
+    bubble.classList.remove("typing");
+    if (!textEl.textContent) bubble.classList.remove("show");
+    window.swh.closeInput();
+  }
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { closeInput(); return; }
+    if (e.key === "Enter" && input.value.trim()) {
+      ws.send(JSON.stringify({ type: "user_message", text: input.value.trim() }));
+      const sent = input.value.trim();
+      closeInput();
+      say("You: " + sent + "\n…", 0);
+    }
+  });
+
+  window.swh.onOpenInput(openInput);
+  window.swh.onShortcut((s) => (shortcut = s));
+
+  const ws = new WebSocket("ws://127.0.0.1:47800");
+  // Server coordinates are in display points; the window may sit offset from the display origin.
+  let geo = { offX: 0, offY: 0, width: innerWidth, height: innerHeight };
+  ws.onopen = async () => {
+    geo = await window.swh.getGeometry();
+    ws.send(JSON.stringify({ type: "hello", width: geo.width, height: geo.height }));
+    clearAll();
+  };
+  ws.onmessage = async (e) => {
+    const m = JSON.parse(e.data);
+    if (m.type === "point") {
+      moveTo(m.x - geo.offX, m.y - geo.offY, true);
+      if (m.label) say(m.label, 0); else say("");
+    } else if (m.type === "say") {
+      say(m.text, m.ms);
+    } else if (m.type === "highlight") {
+      const b = document.createElement("div");
+      b.className = "box";
+      Object.assign(b.style, { left: m.x - geo.offX + "px", top: m.y - geo.offY + "px", width: m.w + "px", height: m.h + "px" });
+      b.innerHTML = "<span></span>";
+      b.firstChild.textContent = m.label || "";
+      document.body.appendChild(b);
+      boxes.push(b);
+    } else if (m.type === "status") {
+      status.setAttribute("fill", m.listening ? "#4cd964" : "#9a9aa5");
+    } else if (m.type === "clear") {
+      clearAll();
+    } else if (m.type === "getCursor") {
+      const p = await window.swh.getCursor();
+      ws.send(JSON.stringify({ type: "cursor", id: m.id, ...p }));
+    }
+  };
+  ws.onclose = () => window.close();
+</script>
+</body>
+</html>
