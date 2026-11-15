@@ -21,7 +21,10 @@ export class Bridge extends EventEmitter {
         this.overlay = ws;
         ws.on("message", (raw) => this.onMessage(JSON.parse(raw.toString())));
         ws.on("close", () => {
-          if (this.overlay === ws) this.overlay = undefined;
+          if (this.overlay === ws) {
+            this.overlay = undefined;
+            this.screen = undefined; // forget the old overlay's size so the next one must say hello
+          }
         });
       });
     });

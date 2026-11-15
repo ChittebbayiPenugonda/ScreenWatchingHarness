@@ -11,6 +11,8 @@ claude mcp add screen-watching -- node "$(pwd)/dist/server.js"
 Grant **Screen Recording** permission to the app that launches the server (Terminal / VS Code / Claude Code) in System Settings > Privacy & Security, then restart it.
 
 ## Tools
+- `activate` – show the helper (starts the overlay). The helper is **off** until this is called
+- `deactivate` – remove the helper (stops the overlay)
 - `screenshot` – downscaled JPEG of the main display; defines the pixel space for pointing
 - `point_at(x, y, label?)` – glide the pointer to a spot
 - `highlight(x, y, width, height, label?)` – draw a box

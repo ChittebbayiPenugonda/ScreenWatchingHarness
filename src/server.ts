@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
@@ -12,12 +12,45 @@ const here = dirname(fileURLToPath(import.meta.url));
 const bridge = new Bridge();
 await bridge.start();
 
-// Launch the overlay as a child process; it connects back to the bridge.
+// The overlay is a child process that connects back to the bridge. It only runs between
+// activate() and deactivate(); the server itself stays up the whole session.
 const electronPath = createRequire(import.meta.url)("electron") as unknown as string;
 // VS Code sets ELECTRON_RUN_AS_NODE, which would make Electron behave like plain Node.
 const { ELECTRON_RUN_AS_NODE: _, ...overlayEnv } = process.env;
-const overlayProc = spawn(electronPath, [join(here, "..", "overlay")], { stdio: "ignore", env: overlayEnv });
-process.on("exit", () => overlayProc.kill());
+let overlayProc: ChildProcess | undefined;
+
+async function activate(): Promise<string> {
+  if (overlayProc && bridge.connected) return "Helper is already active.";
+  if (!overlayProc) {
+    const proc = spawn(electronPath, [join(here, "..", "overlay")], { stdio: "ignore", env: overlayEnv });
+    proc.on("exit", () => {
+      if (overlayProc === proc) overlayProc = undefined; // closed by the user or crashed
+    });
+    overlayProc = proc;
+  }
+  await bridge.waitForOverlay(15000);
+  return "Helper is active on the user's screen.";
+}
+
+async function deactivate(): Promise<string> {
+  const proc = overlayProc;
+  if (!proc) return "Helper was not active.";
+  overlayProc = undefined;
+  await new Promise<void>((resolve) => {
+    proc.once("exit", () => resolve());
+    proc.kill();
+    setTimeout(resolve, 2000);
+  });
+  return "Helper is gone from the screen.";
+}
+
+// Every tool that touches the overlay goes through this.
+async function overlay() {
+  if (!overlayProc) throw new Error("The helper is not active. Call activate first.");
+  return bridge.waitForOverlay();
+}
+
+process.on("exit", () => overlayProc?.kill());
 process.on("SIGINT", () => process.exit(0));
 process.on("SIGTERM", () => process.exit(0));
 
@@ -25,7 +58,7 @@ let lastCapture: Capture | undefined;
 
 // Convert coordinates in the last screenshot's pixel space to screen points.
 async function toScreen(x: number, y: number) {
-  const screen = await bridge.waitForOverlay();
+  const screen = await overlay();
   const w = lastCapture?.width ?? screen.width;
   const h = lastCapture?.height ?? screen.height;
   return { x: (x * screen.width) / w, y: (y * screen.height) / h };
@@ -45,9 +78,24 @@ const server = new McpServer(
   { name: "screen-watching-harness", version: "0.1.0" },
   {
     instructions:
-      "A small helper character lives on the user's screen. The user can type to you through it. " +
-      "Call wait_for_message in a loop to listen; reply with say(). Use screenshot + point_at to show things.",
+      "A small helper character can live on the user's screen. It is OFF until you call activate, and is removed by deactivate. " +
+      "Once active, the user can type to you through it: call wait_for_message in a loop to listen; reply with say(). " +
+      "Use screenshot + point_at to show things.",
   }
+);
+
+server.tool(
+  "activate",
+  "Show the helper on the user's screen (starts the overlay). Call this when the user asks you to wake up, appear, or start watching. Safe to call if already active.",
+  {},
+  async () => ({ content: [{ type: "text", text: await activate() }] })
+);
+
+server.tool(
+  "deactivate",
+  "Remove the helper from the user's screen (stops the overlay). Call this when the user asks you to go away or stop watching. Stop calling wait_for_message afterwards.",
+  {},
+  async () => ({ content: [{ type: "text", text: await deactivate() }] })
 );
 
 server.tool(
@@ -106,7 +154,7 @@ server.tool(
     seconds: z.number().min(1).max(60).optional().describe("How long to show it (default scales with length)"),
   },
   async ({ text, seconds }) => {
-    await bridge.waitForOverlay();
+    await overlay();
     bridge.send({ type: "say", text, ms: (seconds ?? Math.max(5, text.length / 12)) * 1000 });
     return { content: [{ type: "text", text: "Said it" }] };
   }
@@ -118,7 +166,7 @@ server.tool(
     "Returns the message, or says none arrived so you can call again. Call this in a loop to stay available.",
   { timeoutSeconds: z.number().min(1).max(60).optional().describe("Default 30") },
   async ({ timeoutSeconds }) => {
-    await bridge.waitForOverlay();
+    await overlay();
     if (inbox.length) return { content: [{ type: "text", text: inbox.shift()! }] };
     bridge.send({ type: "status", listening: true });
     const text = await new Promise<string | undefined>((resolve) => {
@@ -137,7 +185,7 @@ server.tool(
 );
 
 server.tool("clear", "Send the helper back to its resting spot and remove the speech bubble and any highlights.", {}, async () => {
-  await bridge.waitForOverlay();
+  await overlay();
   bridge.send({ type: "clear" });
   return { content: [{ type: "text", text: "Cleared" }] };
 });
@@ -147,7 +195,7 @@ server.tool(
   "Get the user's mouse position in the last screenshot's pixel space (take a screenshot first).",
   {},
   async () => {
-    const screen = await bridge.waitForOverlay();
+    const screen = await overlay();
     const r = await bridge.request<{ x: number; y: number }>({ type: "getCursor" });
     const w = lastCapture?.width ?? screen.width;
     const h = lastCapture?.height ?? screen.height;
