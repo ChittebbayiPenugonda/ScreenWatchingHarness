@@ -15,19 +15,27 @@ A Claude Code plugin for macOS that lets Claude see your screen and show you thi
 
 ## Install
 
-In Claude Code:
+**1. Add the plugin.** In Claude Code, run:
 
 ```
 /plugin marketplace add ChittebbayiPenugonda/ScreenWatchingHarness
 /plugin install screen-buddy@screen-buddy
 ```
 
-Then start a new session (or restart Claude Code).
+**2. Install Electron.** Screen Buddy uses Electron to draw on your screen and capture it. In a terminal, run:
 
-**First use.** The first time Claude looks at your screen or summons a buddy, the plugin installs Electron (about 100 MB, once)
-into `~/Library/Application Support/screen-buddy/runtime`, then macOS asks for **Screen Recording** permission for
-**Electron**. Turn it on in System Settings > Privacy & Security > Screen Recording, then ask again. It covers every session,
-whichever terminal or app Claude runs in.
+```bash
+mkdir -p ~/Library/Application\ Support/screen-buddy/runtime && cd ~/Library/Application\ Support/screen-buddy/runtime && npm install electron@33.4.11
+```
+
+This downloads about 100 MB, once. (If you skip this step, the plugin does the same thing automatically the first time
+it is used, which makes that first request slow.)
+
+**3. Start a new Claude Code session** (or restart Claude Code) so it picks up the plugin.
+
+**4. Allow Screen Recording.** In the new session, say "look at my screen". macOS asks for **Screen Recording**
+permission for **Electron**: turn it on in System Settings > Privacy & Security > Screen Recording, then say it again.
+This is needed once and covers every session, whichever terminal or app Claude runs in.
 
 ## Use
 
