@@ -1,6 +1,6 @@
 {
   "name": "screen-buddy",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Claude Code plugin: every agent session gets its own on-screen buddy that can see your screen, point, talk, and follow along",
@@ -19,5 +19,6 @@
     "electron": "33.4.11",
     "esbuild": "^0.24.2",
     "typescript": "^5.6.0"
-  }
+  },
+  "license": "MIT"
 }

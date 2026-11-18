@@ -114,7 +114,19 @@ async function resolveElectron(log: (msg: string) => void): Promise<string> {
   fs.mkdirSync(runtime, { recursive: true });
   if (!fs.existsSync(path.join(runtime, "package.json"))) fs.writeFileSync(path.join(runtime, "package.json"), '{"private":true}\n');
   log(`First run: installing Electron ${ELECTRON_VERSION} into ${runtime} (about 100 MB, one time)…`);
-  await run("npm", ["install", "--no-audit", "--no-fund", `electron@${ELECTRON_VERSION}`], { cwd: runtime, timeout: 300_000 });
+  // Claude apps may start us with a bare PATH, so look for npm next to the Node.js that is running us,
+  // and put that folder first on PATH (npm's own script runs `env node`).
+  const nodeBin = path.dirname(process.execPath);
+  const npm = fs.existsSync(path.join(nodeBin, "npm")) ? path.join(nodeBin, "npm") : "npm";
+  const env = { ...process.env, PATH: `${nodeBin}:${process.env.PATH ?? "/usr/bin:/bin"}` };
+  try {
+    await run(npm, ["install", "--no-audit", "--no-fund", `electron@${ELECTRON_VERSION}`], { cwd: runtime, env, timeout: 300_000 });
+  } catch (e) {
+    throw new Error(
+      `Could not install Electron (needed to draw on screen and capture it). Run this once, then try again:\n` +
+        `  cd "${runtime}" && npm install electron@${ELECTRON_VERSION}\n(${e instanceof Error ? e.message : e})`
+    );
+  }
   return createRequire(path.join(runtime, "package.json"))("electron") as string;
 }
 
