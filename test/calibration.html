@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Buddy Calibration</title>
+<!--
+  Test fixture for screen-buddy calibration and follow-along.
+  Open it full-screen in a browser at 100% zoom. Every target shows its centre in SCREEN POINTS
+  (the same space the overlay draws in), so you can check where a buddy lands against where it should.
+  Click targets or use the arrow keys to move between scenes; the agent should keep up.
+  window.buddyTargets() returns the visible targets and their screen-point centres.
+-->
+<style>
+  :root {
+    --bg: #f4f3ef; --ink: #1d1c1a; --muted: #6b6963; --panel: #ffffff; --edge: rgba(0,0,0,.14);
+    --grid: rgba(0,0,0,.06); --grid2: rgba(0,0,0,.14); --accent: #d4537e; --ok: #1d9e75;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background-color: var(--bg); color: var(--ink); overflow: hidden;
+    font: 14px/1.4 -apple-system, system-ui, sans-serif;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+      linear-gradient(var(--grid2) 1px, transparent 1px), linear-gradient(90deg, var(--grid2) 1px, transparent 1px);
+    background-size: 20px 20px, 20px 20px, 100px 100px, 100px 100px;
+  }
+  .ruler { position: fixed; font: 10px ui-monospace, Menlo, monospace; color: var(--muted); pointer-events: none; }
+
+  #nav {
+    position: fixed; top: 52px; left: 50%; transform: translateX(-50%); z-index: 20;
+    display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--edge);
+    border-radius: 12px; padding: 8px 10px 8px 16px; box-shadow: 0 4px 16px rgba(0,0,0,.06);
+  }
+  #scene-title { font-weight: 600; font-size: 16px; min-width: 220px; }
+  #nav button { font: inherit; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--edge); background: #fff; cursor: pointer; }
+
+  #stage { position: fixed; inset: 0; }
+  .target { position: absolute; transform: translate(-50%, -50%); cursor: pointer; user-select: none; }
+  .target.flash { outline: 3px solid var(--accent); outline-offset: 4px; }
+  .tag {
+    position: absolute; left: 50%; top: 100%; transform: translate(-50%, 6px); white-space: nowrap;
+    font: 11px ui-monospace, Menlo, monospace; color: var(--muted); pointer-events: none;
+  }
+  .no-tags .tag { display: none; }
+
+  .circle { width: 120px; height: 120px; border-radius: 50%; background: #e24b4a; }
+  .square { width: 90px; height: 90px; background: #378add; border-radius: 6px; }
+  .triangle { width: 0; height: 0; border-left: 55px solid transparent; border-right: 55px solid transparent; border-bottom: 95px solid #639922; }
+  .triangle .tag { top: 95px; }
+  .star { width: 18px; height: 18px; background: #ef9f27; clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
+  .btn { padding: 10px 18px; border-radius: 8px; background: var(--ink); color: #fff; font-weight: 600; }
+  .btn.secondary { background: #fff; color: var(--ink); border: 1px solid var(--edge); }
+  .btn.danger { background: #a32d2d; }
+  .icon { width: 32px; height: 32px; border-radius: 6px; background: #fff; border: 1px solid var(--edge); display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+  .field { width: 260px; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--edge); background: #fff; color: var(--muted); }
+  .link { color: #185fa5; font-size: 12px; text-decoration: underline; }
+  .check { display: flex; align-items: center; gap: 6px; }
+  .check span { width: 14px; height: 14px; border: 1.5px solid var(--ink); border-radius: 3px; display: inline-block; }
+  .check.on span { background: var(--ink); }
+  .edge-dot { width: 24px; height: 24px; border-radius: 50%; background: var(--accent); }
+  .edge-dot .tag { display: none; }
+  .group { position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 8px; }
+  .group { flex-wrap: wrap; justify-content: center; max-width: 90vw; }
+  .group .target, .group .group { position: relative; transform: none; }
+  .group.col { flex-direction: column; gap: 26px; }
+  .group.row-wide { gap: 24px; }
+  .icon .tag { display: none; }
+
+  .card { position: absolute; width: 200px; height: 120px; border-radius: 12px; background: #fff; border: 1px solid var(--edge); }
+  #scrim { position: absolute; inset: 0; background: rgba(20, 20, 20, .35); }
+  .modal { width: 380px; padding: 22px; border-radius: 14px; background: #fff; box-shadow: 0 20px 60px rgba(0,0,0,.25); cursor: default; }
+  .modal h2 { margin: 0 0 6px; font-size: 18px; }
+  .modal p { margin: 0 0 18px; color: var(--muted); }
+  .modal .row { display: flex; justify-content: flex-end; gap: 10px; }
+  .modal .target { position: relative; transform: none; }
+  .modal .close { position: absolute; right: 12px; top: 10px; width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; color: var(--muted); }
+  .modal .tag { display: none; }
+
+  .list { width: 280px; height: 360px; overflow-y: auto; background: #fff; border: 1px solid var(--edge); border-radius: 12px; cursor: default; }
+  .list .target { position: relative; transform: none; padding: 9px 14px; border-bottom: 1px solid rgba(0,0,0,.05); }
+  .list .tag { display: none; }
+
+  #hud {
+    position: fixed; left: 52px; bottom: 52px; z-index: 20; width: 330px; background: var(--panel);
+    border: 1px solid var(--edge); border-radius: 12px; padding: 12px 14px; box-shadow: 0 4px 16px rgba(0,0,0,.06);
+    font: 12px/1.5 ui-monospace, Menlo, monospace;
+  }
+  #hud b { font-family: -apple-system, system-ui, sans-serif; font-size: 12px; }
+  #hud .warn { color: #a32d2d; }
+  #hud .ok { color: var(--ok); }
+  #log { margin-top: 6px; border-top: 1px solid var(--edge); padding-top: 6px; color: var(--muted); min-height: 72px; }
+</style>
+</head>
+<body>
+<div id="nav">
+  <button id="back" aria-label="Previous scene">&larr;</button>
+  <div id="scene-title"></div>
+  <button id="next" aria-label="Next scene">&rarr;</button>
+</div>
+<div id="stage"></div>
+<div id="hud">
+  <div><b>Cursor (screen pt)</b> <span id="cursor">move the mouse over the page</span></div>
+  <div><b>Hovering</b> <span id="hover">nothing</span></div>
+  <div><b>Page origin on screen</b> <span id="origin">?</span></div>
+  <div><b>Screen</b> <span id="screen"></span> &nbsp;<b>DPR</b> <span id="dpr"></span></div>
+  <div id="zoom"></div>
+  <div id="log"></div>
+</div>
+
+<script>
+  // Screen points = CSS px + page origin on screen. The origin is exact once the mouse has moved over the page
+  // (screenX - clientX); before that it is estimated from the window position, which ignores toolbar height.
+  let origin = null;
+  const estOrigin = () => ({ x: screenX + (outerWidth - innerWidth) / 2, y: screenY + (outerHeight - innerHeight) });
+  const pageOrigin = () => origin ?? estOrigin();
+  const $ = (id) => document.getElementById(id);
+  const stage = $("stage");
+
+  function toScreen(el) {
+    const r = el.getBoundingClientRect();
+    const o = pageOrigin();
+    return { x: Math.round(o.x + r.left + r.width / 2), y: Math.round(o.y + r.top + r.height / 2) };
+  }
+
+  // A target is anything an agent might be asked to point at. pos is in % of the viewport.
+  function target(name, cls, pos, html = "") {
+    const el = document.createElement("div");
+    el.className = "target " + cls;
+    el.dataset.name = name;
+    el.innerHTML = html + '<div class="tag"></div>';
+    if (pos) Object.assign(el.style, { left: pos[0] + "%", top: pos[1] + "%" });
+    return el;
+  }
+
+  // A flex container so dense controls lay out without overlapping at any window size.
+  function group(cls, pos) {
+    const el = document.createElement("div");
+    el.className = "group " + cls;
+    if (pos) Object.assign(el.style, { left: pos[0] + "%", top: pos[1] + "%" });
+    return el;
+  }
+
+  const scenes = [
+    {
+      title: "1 · Shapes",
+      build() {
+        stage.append(
+          target("Red circle", "circle", [22, 38]),
+          target("Blue square", "square", [48, 58]),
+          target("Green triangle", "triangle", [72, 30]),
+          target("Small star", "star", [84, 72]),
+          target("Pay invoice", "btn", [32, 78], "Pay invoice")
+        );
+      },
+      on: { "Pay invoice": 1 },
+    },
+    {
+      title: "2 · Dense toolbar and form",
+      build() {
+        const icons = ["B", "I", "U", "S", "H1", "H2", "•", "1.", "↶", "↷"];
+        const names = ["Bold", "Italic", "Underline", "Strikethrough", "Heading 1", "Heading 2", "Bullet list", "Numbered list", "Undo", "Redo"];
+        const toolbar = group("", [50, 24]);
+        icons.forEach((g, i) => toolbar.append(target(names[i], "icon", null, g)));
+        const row = group("row-wide");
+        row.append(
+          target("Remember me", "check", null, "<span></span> Remember me"),
+          target("Forgot password", "link", null, "Forgot password?")
+        );
+        const form = group("col", [50, 56]);
+        form.append(
+          target("Email field", "field", null, "you@example.com"),
+          target("Password field", "field", null, "••••••••"),
+          row,
+          target("Sign in", "btn", null, "Sign in")
+        );
+        stage.append(toolbar, form);
+      },
+      on: { "Sign in": 2, "Remember me": (el) => el.classList.toggle("on") },
+    },
+    {
+      title: "3 · Modal over content",
+      build() {
+        for (let i = 0; i < 8; i++) {
+          const c = document.createElement("div");
+          c.className = "card";
+          Object.assign(c.style, { left: 8 + (i % 4) * 22 + "%", top: 22 + Math.floor(i / 4) * 32 + "%" });
+          stage.append(c);
+        }
+        const scrim = document.createElement("div");
+        scrim.id = "scrim";
+        stage.append(scrim);
+        const modal = target("Dialog", "modal", [50, 50]);
+        modal.innerHTML =
+          "<h2>Delete 3 files?</h2><p>This cannot be undone.</p><div class='row'></div>";
+        modal.append(target("Close dialog", "close", null, "×"));
+        modal.querySelector(".row").append(
+          target("Cancel", "btn secondary", null, "Cancel"),
+          target("Delete", "btn danger", null, "Delete")
+        );
+        stage.append(modal);
+      },
+      on: { Cancel: 3, Delete: 3, "Close dialog": 3 },
+    },
+    {
+      title: "4 · Moving target and scroll list",
+      build() {
+        stage.append(target("Catch me", "btn", [35, 45], "Catch me (0)"));
+        const list = target("List", "list", [72, 52]);
+        list.querySelector(".tag").remove();
+        for (let i = 1; i <= 60; i++) list.append(target("Item " + i, "", null, "Item " + i));
+        stage.append(list);
+      },
+      on: {
+        "Catch me": (el) => {
+          const n = Number(el.dataset.n || 0) + 1;
+          el.dataset.n = n;
+          el.firstChild.textContent = `Catch me (${n})`;
+          el.style.left = 12 + Math.random() * 44 + "%";
+          el.style.top = 20 + Math.random() * 60 + "%";
+          if (n >= 5) go(4);
+        },
+      },
+    },
+    {
+      title: "5 · Edges and corners",
+      build() {
+        const inset = 18; // px from the edge to the dot's centre
+        const spots = {
+          "Top left": [inset, inset], "Top": ["50%", inset], "Top right": [-inset, inset],
+          "Left": [inset, "50%"], "Right": [-inset, "50%"],
+          "Bottom left": [inset, -inset], "Bottom": ["50%", -inset], "Bottom right": [-inset, -inset],
+        };
+        for (const [name, [x, y]] of Object.entries(spots)) {
+          const el = target(name + " dot", "edge-dot", null);
+          el.style.left = typeof x === "string" ? x : x < 0 ? `calc(100% - ${-x}px)` : x + "px";
+          el.style.top = typeof y === "string" ? y : y < 0 ? `calc(100% - ${-y}px)` : y + "px";
+          stage.append(el);
+        }
+        stage.append(target("Start over", "btn", [50, 50], "Start over"));
+      },
+      on: { "Start over": 0 },
+    },
+  ];
+
+  let current = 0;
+  function go(i) {
+    current = (i + scenes.length) % scenes.length;
+    stage.replaceChildren();
+    scenes[current].build();
+    $("scene-title").textContent = `Scene ${scenes[current].title}`;
+    try { history.replaceState(null, "", "#" + (current + 1)); } catch {} // some viewers block URL changes
+    log(`→ scene ${current + 1}`);
+    refreshTags();
+  }
+
+  function refreshTags() {
+    for (const el of stage.querySelectorAll(".target")) {
+      const tag = el.querySelector(":scope > .tag");
+      if (!tag) continue;
+      const p = toScreen(el);
+      tag.textContent = `${el.dataset.name} (${p.x}, ${p.y})${origin ? "" : " est."}`;
+    }
+  }
+
+  const lines = [];
+  function log(s) {
+    lines.unshift(s);
+    lines.length = Math.min(lines.length, 5);
+    $("log").innerHTML = lines.map((l) => l.replace(/&/g, "&amp;").replace(/</g, "&lt;")).join("<br>");
+  }
+
+  stage.addEventListener("click", (e) => {
+    const el = e.target.closest(".target");
+    if (!el || el.classList.contains("list") || el.classList.contains("modal")) return;
+    const p = toScreen(el);
+    log(`click ${el.dataset.name} @ (${p.x}, ${p.y})`);
+    el.classList.add("flash");
+    setTimeout(() => el.classList.remove("flash"), 300);
+    const action = scenes[current].on?.[el.dataset.name];
+    if (typeof action === "number") setTimeout(() => go(action), 250);
+    else if (typeof action === "function") { action(el); refreshTags(); }
+  });
+
+  addEventListener("mousemove", (e) => {
+    origin = { x: e.screenX - e.clientX, y: e.screenY - e.clientY };
+    $("cursor").textContent = `(${e.screenX}, ${e.screenY})`;
+    $("origin").innerHTML = `(${origin.x}, ${origin.y}) <span class="ok">measured</span>`;
+    const el = e.target.closest?.(".target");
+    if (el && !el.classList.contains("list") && !el.classList.contains("modal")) {
+      const p = toScreen(el);
+      $("hover").textContent = `${el.dataset.name} (${p.x}, ${p.y})`;
+    } else $("hover").textContent = "nothing";
+    refreshTags();
+  });
+
+  addEventListener("keydown", (e) => {
+    if (e.key === "ArrowRight") go(current + 1);
+    if (e.key === "ArrowLeft") go(current - 1);
+    if (e.key === "t") document.body.classList.toggle("no-tags"); // hide coordinates to test the agent blind
+  });
+  $("next").onclick = () => go(current + 1);
+  $("back").onclick = () => go(current - 1);
+  stage.addEventListener("scroll", refreshTags, true);
+  addEventListener("resize", () => { drawRulers(); refreshTags(); });
+
+  function drawRulers() {
+    document.querySelectorAll(".ruler").forEach((r) => r.remove());
+    for (let x = 100; x < innerWidth; x += 100) {
+      const r = document.createElement("div");
+      r.className = "ruler";
+      Object.assign(r.style, { left: x + 3 + "px", top: "2px" });
+      r.textContent = x;
+      document.body.append(r);
+    }
+    for (let y = 100; y < innerHeight; y += 100) {
+      const r = document.createElement("div");
+      r.className = "ruler";
+      Object.assign(r.style, { left: "3px", top: y + 2 + "px" });
+      r.textContent = y;
+      document.body.append(r);
+    }
+  }
+
+  function showEnv() {
+    $("screen").textContent = `${screen.width}×${screen.height} pt`;
+    $("dpr").textContent = devicePixelRatio;
+    if (!origin) $("origin").innerHTML = `(${pageOrigin().x}, ${pageOrigin().y}) <span class="warn">estimated, move mouse</span>`;
+    const zoomed = ![1, 2, 3].includes(Math.round(devicePixelRatio * 100) / 100);
+    $("zoom").innerHTML = zoomed ? '<span class="warn">Browser zoom is not 100%: CSS px ≠ screen points</span>' : "";
+  }
+
+  // For automated checks: the visible targets and their centres in screen points.
+  window.buddyTargets = () =>
+    [...stage.querySelectorAll(".target")]
+      .filter((el) => el.getClientRects().length)
+      .map((el) => ({ name: el.dataset.name, ...toScreen(el), measured: !!origin }));
+
+  drawRulers();
+  showEnv();
+  setInterval(showEnv, 1000);
+  go(Math.max(0, (Number(location.hash.slice(1)) || 1) - 1));
+</script>
+</body>
+</html>

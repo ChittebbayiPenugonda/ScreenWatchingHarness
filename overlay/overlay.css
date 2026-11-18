@@ -1,0 +1,98 @@
+html, body {
+  margin: 0; width: 100vw; height: 100vh; overflow: hidden; background: transparent;
+  font-family: -apple-system, system-ui, sans-serif;
+}
+#layer { position: fixed; inset: 0; pointer-events: none; }
+
+/* A buddy's origin is the exact point it points at. JS moves .buddy; .wrap pops in and out;
+   .body stretches along the direction of travel.
+   Nothing loops forever while a buddy rests: an endless animation on a full-screen transparent window
+   costs about 12% CPU. Motion is kept for moments (flying, arriving, thinking). */
+.buddy { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.wrap { position: absolute; left: 0; top: 0; }
+.buddy.pop .wrap { animation: pop 520ms cubic-bezier(.2, 1.6, .4, 1); }
+.buddy.leaving .wrap { animation: out 380ms ease-in forwards; }
+@keyframes pop { from { transform: scale(0); opacity: 0; } }
+@keyframes out { to { transform: scale(.2); opacity: 0; } }
+
+.body { position: absolute; left: -15px; top: -15px; width: 30px; height: 30px; pointer-events: auto; cursor: pointer; }
+.body.square { left: -14px; top: -14px; width: 28px; height: 28px; }
+.body.pill { left: -19px; top: -12px; width: 38px; height: 24px; }
+
+.core {
+  width: 100%; height: 100%; box-sizing: border-box; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, hsla(var(--h), 100%, 92%, .55), hsla(var(--h), 95%, 70%, .22) 60%);
+  border: 1.5px solid hsla(var(--h), 100%, 84%, .85);
+  box-shadow: 0 0 10px hsla(var(--h), 95%, 66%, .8), 0 0 28px hsla(var(--h), 95%, 60%, .42),
+    inset 0 0 8px hsla(var(--h), 100%, 88%, .45);
+  opacity: .62; transition: opacity 300ms, transform 300ms;
+}
+.square .core { border-radius: 9px; }
+.pill .core { border-radius: 12px; }
+.buddy.listening .core, .buddy[data-state="pointing"] .core, .buddy[data-state="thinking"] .core, .buddy:hover .core { opacity: .96; }
+.buddy[data-state="pointing"] .core { transform: scale(1.08); }
+
+/* Listening: a steady ring, which ripples once when listening starts. */
+.halo {
+  position: absolute; left: -24px; top: -24px; width: 48px; height: 48px; border-radius: 50%;
+  border: 1.5px solid hsla(var(--h), 100%, 82%, .6); opacity: 0; transform: scale(.8);
+  transition: opacity 300ms, transform 300ms;
+}
+.buddy.listening .halo { opacity: .7; transform: scale(.85); animation: halo-in 700ms ease-out; }
+@keyframes halo-in { 0% { transform: scale(.55); opacity: 1; } 60% { transform: scale(1.1); } 100% { transform: scale(.85); opacity: .7; } }
+
+/* Thinking: three sparks orbiting. */
+.orbit { position: absolute; left: -24px; top: -24px; width: 48px; height: 48px; opacity: 0; transition: opacity 300ms; }
+.buddy[data-state="thinking"] .orbit { opacity: 1; animation: spin 1.15s linear infinite; }
+.orbit i {
+  position: absolute; left: 21.5px; top: 0; width: 5px; height: 5px; border-radius: 50%;
+  background: hsl(var(--h), 100%, 88%); box-shadow: 0 0 6px hsl(var(--h), 100%, 70%);
+  transform-origin: 2.5px 24px;
+}
+.orbit i:nth-child(2) { transform: rotate(120deg); opacity: .7; }
+.orbit i:nth-child(3) { transform: rotate(240deg); opacity: .4; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.ripple {
+  position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%;
+  border: 2px solid hsla(var(--h), 100%, 80%, .9); animation: ripple 700ms ease-out forwards;
+}
+@keyframes ripple { from { transform: scale(.3); opacity: 1; } to { transform: scale(1.9); opacity: 0; } }
+
+.bubble {
+  position: absolute; left: 0; top: 0; max-width: 300px; width: max-content; box-sizing: border-box;
+  padding: 7px 12px 9px; border-radius: 13px; background: rgba(22, 22, 26, .86); color: #fff;
+  border: 1px solid hsla(var(--h), 90%, 75%, .35); box-shadow: 0 6px 24px rgba(0, 0, 0, .25);
+  font-size: 13px; line-height: 1.38; font-weight: 500; white-space: pre-wrap; overflow-wrap: anywhere;
+  backdrop-filter: blur(10px); opacity: 0; transform: translateY(4px);
+  transition: opacity 180ms, transform 180ms; pointer-events: none;
+}
+.bubble.show { opacity: 1; transform: none; }
+.who { font-size: 10.5px; font-weight: 650; letter-spacing: .02em; color: hsl(var(--h), 100%, 82%); margin-bottom: 2px; }
+.input {
+  display: none; width: 260px; padding: 0; background: transparent; border: 0; outline: 0; color: #fff;
+  font: 500 13px -apple-system, system-ui, sans-serif;
+}
+.hint { display: none; margin-top: 4px; font-size: 10px; opacity: .55; }
+.bubble.typing { pointer-events: auto; }
+.bubble.typing .text { display: none; }
+.bubble.typing .input, .bubble.typing .hint { display: block; }
+
+.hl {
+  position: absolute; box-sizing: border-box; border-radius: 8px;
+  border: 2.5px solid hsla(var(--h), 100%, 74%, .92);
+  box-shadow: 0 0 14px hsla(var(--h), 100%, 65%, .55), inset 0 0 10px hsla(var(--h), 100%, 72%, .22);
+  animation: hl-in 360ms cubic-bezier(.2, 1.3, .4, 1);
+}
+.hl span {
+  position: absolute; left: -2px; top: -27px; padding: 3px 8px; border-radius: 8px; white-space: nowrap;
+  background: rgba(22, 22, 26, .86); color: #fff; font: 600 12px -apple-system, system-ui, sans-serif;
+}
+.hl span:empty { display: none; }
+@keyframes hl-in { from { opacity: 0; transform: scale(1.08); } }
+
+/* Status line while the agent works: quieter than speech, with ticking dots. */
+.bubble.status { background: rgba(22, 22, 26, .72); }
+.bubble.status .text { font-style: italic; opacity: .85; }
+.bubble.status .text::after { content: ""; display: inline-block; width: 1.2em; text-align: left; animation: dots 1.2s steps(4, end) infinite; }
+@keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }

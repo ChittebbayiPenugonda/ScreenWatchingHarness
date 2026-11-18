@@ -1,23 +1,23 @@
 {
-  "name": "screen-watching-harness",
-  "version": "0.1.0",
+  "name": "screen-buddy",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "MCP server that lets agents see your screen and point at things with an on-screen overlay",
+  "description": "Claude Code plugin: every agent session gets its own on-screen buddy that can see your screen, point, talk, and follow along",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/server.js",
-    "overlay": "electron overlay"
+    "build": "tsc --noEmit && node scripts/build.mjs",
+    "test": "node test/smoke.mjs",
+    "test:look": "node test/look.mjs",
+    "start": "node dist/server.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "electron": "^33.0.0",
-    "ws": "^8.18.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "@types/ws": "^8.5.0",
+    "electron": "33.4.11",
+    "esbuild": "^0.24.2",
     "typescript": "^5.6.0"
   }
 }

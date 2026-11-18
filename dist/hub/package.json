@@ -1,0 +1,5 @@
+{
+  "name": "screen-buddy",
+  "productName": "Screen Buddy",
+  "main": "main.cjs"
+}

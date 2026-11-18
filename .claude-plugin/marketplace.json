@@ -1,0 +1,16 @@
+{
+  "name": "screen-buddy",
+  "owner": {
+    "name": "Chittebbayi Penugonda"
+  },
+  "plugins": [
+    {
+      "name": "screen-buddy",
+      "source": "./",
+      "description": "Every Claude session gets its own on-screen buddy that can see, point, talk, and follow along (macOS)."
+    }
+  ],
+  "metadata": {
+    "description": "Screen buddy: on-screen companions for Claude Code sessions"
+  }
+}

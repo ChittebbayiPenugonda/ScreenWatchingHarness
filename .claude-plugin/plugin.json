@@ -1,0 +1,23 @@
+{
+  "name": "screen-buddy",
+  "version": "0.2.0",
+  "description": "Give every Claude session its own on-screen buddy: it sees your screen, points at things, talks in a speech bubble, listens when you type to it, and follows along as you click (macOS).",
+  "author": {
+    "name": "Chittebbayi Penugonda"
+  },
+  "keywords": [
+    "screen",
+    "overlay",
+    "pointer",
+    "macos",
+    "assistant"
+  ],
+  "mcpServers": {
+    "screen-buddy": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/dist/server.js"
+      ]
+    }
+  }
+}
